@@ -7,24 +7,25 @@ Public Module TelegramNotifier
 
     ' Bot Token for @Mycloud_pmsbot
     Private ReadOnly TelegramBotToken As String = "8849670353:AAG6aUf_AwokE1vs8hxW5lTDCFQK2PMMWY0"
+    Private ReadOnly DefaultChatId As String = "-1002288339192"
 
     Public Sub SendAssignmentAlertsTelegram(connectionString As String)
         Console.WriteLine(vbLf & "--> Checking for newly assigned tickets to notify agents via Telegram...")
 
-        ' SQL Query: Find un-notified active tickets (Open, Hold, Pending, Escalated) where agent has a TelegramChatId configured
+        ' SQL Query: Find un-notified active tickets directly from Zoho_Tickets_Staging
         Dim query As String = "
             SELECT 
-                t.TicketId, 
-                t.TicketNumber, 
-                t.Subject, 
-                t.AssigneeName, 
-                a.TelegramChatId
-            FROM Zoho_Tickets_Staging t
-            INNER JOIN Zoho_Agents a ON IFNULL(t.AssigneeId, '') = a.AgentId OR t.AssigneeName = a.AgentName
-            WHERE IFNULL(t.AssignmentNotified, 0) = 0 
-              AND a.TelegramChatId IS NOT NULL 
-              AND a.TelegramChatId <> ''
-              AND t.Status IN ('Open', 'Hold', 'Pending', 'Escalated')"
+                TicketId, 
+                TicketNumber, 
+                Subject, 
+                Assignee,
+                Status
+            FROM Zoho_Tickets_Staging
+            WHERE IFNULL(AssignmentNotified, 0) = 0 
+              AND Assignee IS NOT NULL 
+              AND Assignee <> '' 
+              AND Assignee <> 'Unassigned'
+              AND Status IN ('Open', 'Hold', 'Pending', 'Escalated')"
 
         Dim pendingNotifications As New List(Of TicketAlertDto)()
 
@@ -39,8 +40,8 @@ Public Module TelegramNotifier
                             .TicketId = reader("TicketId").ToString(),
                             .TicketNumber = reader("TicketNumber").ToString(),
                             .Subject = reader("Subject").ToString(),
-                            .AssigneeName = reader("AssigneeName").ToString(),
-                            .ChatId = reader("TelegramChatId").ToString()
+                            .AssigneeName = reader("Assignee").ToString(),
+                            .ChatId = DefaultChatId
                         })
                     End While
                 End Using
@@ -65,12 +66,12 @@ Public Module TelegramNotifier
 
                     ' 3. Mark as notified in SQL so it won't send duplicates
                     If isSent Then
-                        Dim updateQuery As String = "UPDATE Zoho_Tickets_Staging SET AssignmentNotified = 1 WHERE TicketId = ?TicketId"
+                        Dim updateQuery As String = "UPDATE Zoho_Tickets_Staging SET AssignmentNotified = 1 WHERE TicketID = @TicketId"
                         Using updateCmd As New MySqlCommand(updateQuery, conn)
-                            updateCmd.Parameters.AddWithValue("?TicketId", item.TicketId)
+                            updateCmd.Parameters.AddWithValue("@TicketId", item.TicketId)
                             updateCmd.ExecuteNonQuery()
                         End Using
-                        Console.WriteLine($"   [√] Telegram alert sent to {item.AssigneeName} for Ticket #{item.TicketNumber}")
+                        Console.WriteLine($"   [√] Telegram alert sent for Ticket #{item.TicketNumber} -> {item.AssigneeName}")
                     End If
                 Next
             End Using
