@@ -22,7 +22,7 @@ Module Module1
     Private ReadOnly BaseDeskUrl As String = "https://desk.zoho.com/api/v1/tickets"
 
     ' TiDB Cloud Connection String (MySQL Compatible)
-    Private SqlConnectionString As String = "server=gateway01.ap-southeast-1.prod.aws.tidbcloud.com;port=4000;database=sys;uid=3fvtL6XakG6M5TM.root;pwd=7qrE14qM5yX5QucS;SslMode=Preferred;"
+    Private SqlConnectionString As String = "server=gateway01.ap-southeast-1.prod.aws.tidbcloud.com;port=4000;database=zoho-desk;uid=3fvtL6XakG6M5TM.root;pwd=7qrE14qM5yX5QucS;SslMode=Preferred;"
 
     ' --- TARGET EXCEL OUTPUT PATH ---
     Private ReadOnly ExcelOutputPath As String = "E:\ZohoSqlBot\Zoho_Desk_CEO_Dashboard.xlsx"
@@ -74,7 +74,7 @@ Module Module1
 
         Console.WriteLine()
         Console.WriteLine("Press any key to exit...")
-        Console.ReadKey()
+        'Console.ReadKey()
     End Sub
 
     ' --- SET UP 10-DAY DATE FILTER ---
