@@ -1,13 +1,14 @@
 Imports System.IO
 Imports System.Net.Http
 Imports System.Net.Http.Headers
+Imports System.Text
 Imports System.Text.Json
 Imports System.Threading.Tasks
 Imports MySql.Data.MySqlClient
 Imports OfficeOpenXml
 Imports OfficeOpenXml.Style
 
-Module Module1
+Module Program
 
     ' =========================================================
     ' CONFIGURATION — ZOHO DESK & TIDB CLOUD CREDENTIALS
@@ -20,6 +21,9 @@ Module Module1
     ' Zoho India (.in) Regional Endpoints
     Private ReadOnly TokenUrl As String = "https://accounts.zoho.com/oauth/v2/token"
     Private ReadOnly BaseDeskUrl As String = "https://desk.zoho.com/api/v1/tickets"
+
+    ' Telegram Bot Configuration
+    Private ReadOnly TelegramBotToken As String = "8849670353:AAG6aUf_AwokE1vs8hxW5lTDCFQK2PMMWY0"
 
     ' TiDB Cloud Connection String (MySQL Compatible)
     Private SqlConnectionString As String = "server=gateway01.ap-southeast-1.prod.aws.tidbcloud.com;port=4000;database=zoho-desk;uid=3fvtL6XakG6M5TM.root;pwd=7qrE14qM5yX5QucS;SslMode=Preferred;"
@@ -40,6 +44,9 @@ Module Module1
         SetupTenDayDateFilter()
 
         Try
+            ' -------------------------------------------------------------
+            ' STEP 1 & 2: FETCH ZOHO DESK TICKETS & UPSERT TO DATABASE
+            ' -------------------------------------------------------------
             Console.WriteLine("1. Getting Fresh Access Token from Zoho OAuth (.in)...")
             Dim freshAccessToken As String = GetFreshAccessTokenAsync().GetAwaiter().GetResult()
             Console.WriteLine("   [✓] Access token retrieved successfully.")
@@ -47,18 +54,27 @@ Module Module1
 
             Console.WriteLine($"2. Fetching tickets for date range: {FilterStartDate:yyyy-MM-dd HH:mm:ss} to {FilterEndDate:yyyy-MM-dd HH:mm:ss}...")
             Dim totalSynced As Integer = FetchAndSyncTicketsByDateRange(freshAccessToken, ZohoOrgId, FilterStartDate, FilterEndDate)
-            Console.WriteLine($"   --> SUCCESS: Total {totalSynced} tickets synced to TiDB Cloud!")
+            Console.WriteLine($"   --> SUCCESS: Total {totalSynced} tickets synced/updated in TiDB Cloud!")
             Console.WriteLine()
 
             ' -------------------------------------------------------------
-            ' TELEGRAM NOTIFICATION DISPATCHER (@Mycloud_pmsbot)
+            ' STEP 3: TELEGRAM NOTIFICATION DISPATCHER (@Mycloud_pmsbot)
             ' -------------------------------------------------------------
             Console.WriteLine("3. Dispatching pending assignment notifications to Telegram...")
-            TelegramNotifier.SendAssignmentAlertsTelegram(SqlConnectionString)
+            SendAssignmentAlertsTelegram(SqlConnectionString)
             Console.WriteLine()
 
+            ' -------------------------------------------------------------
+            ' STEP 4: GENERATE CEO EXECUTIVE EXCEL DASHBOARD
+            ' -------------------------------------------------------------
             Console.WriteLine("4. Generating Professional CEO Excel Dashboard with Formulas...")
             GenerateCeoDashboardFromSql()
+
+            ' -------------------------------------------------------------
+            ' STEP 5: EMAIL DISPATCH TO YOUR INBOX ONLY
+            ' -------------------------------------------------------------
+            Console.WriteLine("5. Sending Test Dashboard via Email...")
+            SendDashboardViaEmail(ExcelOutputPath)
 
             Console.WriteLine()
             Console.WriteLine($"=========================================================")
@@ -302,6 +318,102 @@ Module Module1
         Return savedCount
     End Function
 
+    ' =========================================================
+    ' STEP 4: TELEGRAM NOTIFICATIONS DISPATCHER (JSON POST)
+    ' =========================================================
+    Public Sub SendAssignmentAlertsTelegram(connString As String)
+        Console.WriteLine("--> Checking for newly assigned tickets to notify agents via Telegram...")
+
+        Dim pendingTickets As New List(Of (TicketID As String, TicketNumber As String, Subject As String, Assignee As String, Status As String, AgentChatId As String))()
+
+        Try
+            Using conn As New MySqlConnection(connString)
+                conn.Open()
+
+                Dim selectSql As String = "
+                    SELECT 
+                        t.TicketID, 
+                        t.TicketNumber, 
+                        t.Subject, 
+                        t.Assignee, 
+                        t.Status, 
+                        a.TelegramChatId
+                    FROM Zoho_Tickets_Staging t
+                    INNER JOIN Telegram_Agents a ON t.Assignee = a.AgentName
+                    WHERE (t.AssignmentNotified IS NULL OR t.AssignmentNotified = 0)
+                      AND t.Assignee IS NOT NULL 
+                      AND t.Assignee <> '' 
+                      AND t.Assignee <> 'Unassigned';"
+
+                Using cmd As New MySqlCommand(selectSql, conn)
+                    Using reader = cmd.ExecuteReader()
+                        While reader.Read()
+                            pendingTickets.Add((
+                                reader("TicketID").ToString(),
+                                reader("TicketNumber").ToString(),
+                                reader("Subject").ToString(),
+                                reader("Assignee").ToString(),
+                                reader("Status").ToString(),
+                                reader("TelegramChatId").ToString()
+                            ))
+                        End While
+                    End Using
+                End Using
+
+                If pendingTickets.Count = 0 Then
+                    Console.WriteLine("   [!] No new unnotified ticket assignments found for registered agents.")
+                    Return
+                End If
+
+                Console.WriteLine($"   [+] Found {pendingTickets.Count} pending individual notification(s) to dispatch.")
+
+                Using client As New HttpClient()
+                    Dim telegramApiUrl As String = $"https://api.telegram.org/bot{TelegramBotToken}/sendMessage"
+
+                    For Each t In pendingTickets
+                        Dim formattedMessage As String = $"<b>🚨 New Ticket Assigned to You!</b>" & vbCrLf & vbCrLf &
+                                                        $"<b>Ticket #:</b> {t.TicketNumber}" & vbCrLf &
+                                                        $"<b>Ticket ID:</b> {t.TicketID}" & vbCrLf &
+                                                        $"<b>Subject:</b> {t.Subject}" & vbCrLf &
+                                                        $"<b>Status:</b> {t.Status}" & vbCrLf &
+                                                        $"<b>Assigned To:</b> {t.Assignee}"
+
+                        Dim payloadObj = New With {
+                            .chat_id = t.AgentChatId,
+                            .text = formattedMessage,
+                            .parse_mode = "HTML"
+                        }
+
+                        Dim jsonPayload As String = JsonSerializer.Serialize(payloadObj)
+                        Dim content As New StringContent(jsonPayload, Encoding.UTF8, "application/json")
+
+                        Try
+                            Dim response = client.PostAsync(telegramApiUrl, content).GetAwaiter().GetResult()
+                            Dim responseBody = response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+
+                            If response.IsSuccessStatusCode Then
+                                Console.WriteLine($"   [✓] Telegram alert sent to {t.Assignee} (Chat ID: {t.AgentChatId}) for Ticket #{t.TicketNumber}")
+
+                                Dim updateSql As String = "UPDATE Zoho_Tickets_Staging SET AssignmentNotified = 1 WHERE TicketID = @TicketID;"
+                                Using updateCmd As New MySqlCommand(updateSql, conn)
+                                    updateCmd.Parameters.AddWithValue("@TicketID", t.TicketID)
+                                    updateCmd.ExecuteNonQuery()
+                                End Using
+                            Else
+                                Console.WriteLine($"   [X] Failed for {t.Assignee} (Ticket #{t.TicketNumber}). Response: {responseBody}")
+                            End If
+                        Catch exHttp As Exception
+                            Console.WriteLine($"   [X] HTTP Exception for {t.Assignee}: {exHttp.Message}")
+                        End Try
+                    Next
+                End Using
+            End Using
+
+        Catch ex As Exception
+            Console.WriteLine($"   [X] Telegram Dispatcher Error: {ex.Message}")
+        End Try
+    End Sub
+
     Private Function GetJsonPropString(elem As JsonElement, propName As String, defaultValue As String) As String
         Dim val As JsonElement = Nothing
         If elem.TryGetProperty(propName, val) AndAlso val.ValueKind <> JsonValueKind.Null Then
@@ -311,10 +423,10 @@ Module Module1
     End Function
 
     ' =========================================================
-    ' STEP 4: BUILD CEO EXECUTIVE EXCEL DASHBOARD (EPPlus)
+    ' STEP 5: BUILD CEO EXECUTIVE EXCEL DASHBOARD (EPPlus)
     ' =========================================================
     Private Sub GenerateCeoDashboardFromSql()
-        ExcelPackage.License.SetNonCommercialPersonal("ZohoSqlBot")
+        ExcelPackage.LicenseContext = LicenseContext.NonCommercial
 
         Dim fileInfo As New FileInfo(ExcelOutputPath)
         If fileInfo.Directory IsNot Nothing AndAlso Not fileInfo.Directory.Exists Then
@@ -709,6 +821,48 @@ Module Module1
 
             package.SaveAs(fileInfo)
         End Using
+    End Sub
+
+    ' =========================================================
+    ' STEP 6: EMAIL DISPATCH TO YOUR INBOX ONLY
+    ' =========================================================
+    Public Sub SendDashboardViaEmail(attachmentPath As String)
+        Try
+            ' Configured strictly to your email address during testing
+            Dim recipientEmail As String = "deepak@mycloudhospitality.com"
+            Dim senderEmail As String = "your-smtp-email@gmail.com"
+            Dim smtpAppPassword As String = "YOUR_APP_PASSWORD"
+
+            Dim mail As New System.Net.Mail.MailMessage()
+            mail.From = New System.Net.Mail.MailAddress(senderEmail, "Zoho Desk Executive Bot (Test)")
+
+            ' Send ONLY to your inbox
+            mail.To.Clear()
+            mail.To.Add(recipientEmail)
+
+            mail.Subject = "[TEST RUN] Executive CEO Helpdesk Dashboard - " & DateTime.Now.ToString("yyyy-MM-dd HH:mm")
+            mail.Body = "Hi Deepak," & vbCrLf & vbCrLf &
+                        "This is an automated test report from ZohoSqlBot." & vbCrLf &
+                        "Please find the latest generated Executive CEO Dashboard attached." & vbCrLf & vbCrLf &
+                        "Regards," & vbCrLf &
+                        "Automation Team"
+
+            ' Attach Generated Excel
+            If File.Exists(attachmentPath) Then
+                mail.Attachments.Add(New System.Net.Mail.Attachment(attachmentPath))
+            End If
+
+            ' SMTP Client Configuration
+            Dim smtp As New System.Net.Mail.SmtpClient("smtp.gmail.com", 587)
+            smtp.Credentials = New System.Net.NetworkCredential(senderEmail, smtpAppPassword)
+            smtp.EnableSsl = True
+            smtp.Send(mail)
+
+            Console.WriteLine($"   [✓] Test Dashboard emailed successfully to {recipientEmail}!")
+
+        Catch ex As Exception
+            Console.WriteLine($"   [X] Email Dispatch Error: {ex.Message}")
+        End Try
     End Sub
 
     ' =========================================================
