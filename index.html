@@ -42,9 +42,9 @@
                 <i class="fa-solid fa-file-excel"></i>
                 Download Excel Report
             </button>
-            <span class="bg-blue-500/10 text-blue-400 text-xs font-semibold px-3 py-2 rounded-lg border border-blue-500/20">
-                <i class="fa-solid fa-arrows-rotate mr-1 animate-spin"></i> Auto-Sync 30m
-            </span>
+            <button onclick="loadDashboardData()" class="bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-semibold px-3 py-2 rounded-lg border border-blue-500/20 flex items-center gap-2">
+                <i class="fa-solid fa-arrows-rotate mr-1" id="sync-icon"></i> Refresh Data
+            </button>
         </div>
     </div>
 
@@ -52,28 +52,28 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Total Volume</div>
-            <div class="text-3xl font-extrabold text-white mt-2" id="kpi-total">142</div>
-            <div class="text-xs text-blue-400 mt-2 font-medium"><i class="fa-solid fa-calendar-days mr-1"></i> Last 10 Days</div>
+            <div class="text-3xl font-extrabold text-white mt-2" id="kpi-total">0</div>
+            <div class="text-xs text-blue-400 mt-2 font-medium"><i class="fa-solid fa-calendar-days mr-1"></i> Live Synced</div>
             <div class="absolute -right-2 -bottom-2 opacity-10 text-blue-400 text-6xl"><i class="fa-solid fa-ticket"></i></div>
         </div>
 
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Total Closed</div>
-            <div class="text-3xl font-extrabold text-emerald-400 mt-2" id="kpi-closed">118</div>
-            <div class="text-xs text-emerald-400 mt-2 font-medium"><i class="fa-solid fa-circle-check mr-1"></i> 83.1% Resolution Rate</div>
+            <div class="text-3xl font-extrabold text-emerald-400 mt-2" id="kpi-closed">0</div>
+            <div class="text-xs text-emerald-400 mt-2 font-medium" id="kpi-resolution-rate"><i class="fa-solid fa-circle-check mr-1"></i> 0.0% Resolution Rate</div>
             <div class="absolute -right-2 -bottom-2 opacity-10 text-emerald-400 text-6xl"><i class="fa-solid fa-check-double"></i></div>
         </div>
 
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Avg Resolution Time</div>
-            <div class="text-3xl font-extrabold text-amber-400 mt-2" id="kpi-avgtime">4.2 <span class="text-lg">hrs</span></div>
+            <div class="text-3xl font-extrabold text-amber-400 mt-2" id="kpi-avgtime">0.0 <span class="text-lg">hrs</span></div>
             <div class="text-xs text-amber-400 mt-2 font-medium"><i class="fa-solid fa-clock mr-1"></i> Target: &lt; 6.0 hrs</div>
             <div class="absolute -right-2 -bottom-2 opacity-10 text-amber-400 text-6xl"><i class="fa-solid fa-stopwatch"></i></div>
         </div>
 
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Telegram Alerts Dispatched</div>
-            <div class="text-3xl font-extrabold text-sky-400 mt-2" id="kpi-alerts">24</div>
+            <div class="text-3xl font-extrabold text-sky-400 mt-2" id="kpi-alerts">0</div>
             <div class="text-xs text-sky-400 mt-2 font-medium"><i class="fa-solid fa-paper-plane mr-1"></i> Sent to Agents</div>
             <div class="absolute -right-2 -bottom-2 opacity-10 text-sky-400 text-6xl"><i class="fa-brands fa-telegram"></i></div>
         </div>
@@ -118,43 +118,8 @@
                         <th class="p-3 text-center">Avg Closing Time</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800">
-                    <tr class="hover:bg-slate-800/40">
-                        <td class="p-3 font-medium text-white">Deepak Singh</td>
-                        <td class="p-3 text-center font-bold">45</td>
-                        <td class="p-3 text-center text-amber-400">2</td>
-                        <td class="p-3 text-center text-blue-400">3</td>
-                        <td class="p-3 text-center text-emerald-400">40</td>
-                        <td class="p-3 text-center">152.0 hrs</td>
-                        <td class="p-3 text-center font-semibold text-emerald-400">3.8 hrs</td>
-                    </tr>
-                    <tr class="hover:bg-slate-800/40">
-                        <td class="p-3 font-medium text-white">Rishab</td>
-                        <td class="p-3 text-center font-bold">38</td>
-                        <td class="p-3 text-center text-amber-400">1</td>
-                        <td class="p-3 text-center text-blue-400">2</td>
-                        <td class="p-3 text-center text-emerald-400">35</td>
-                        <td class="p-3 text-center">147.0 hrs</td>
-                        <td class="p-3 text-center font-semibold text-emerald-400">4.2 hrs</td>
-                    </tr>
-                    <tr class="hover:bg-slate-800/40">
-                        <td class="p-3 font-medium text-white">Manoj</td>
-                        <td class="p-3 text-center font-bold">32</td>
-                        <td class="p-3 text-center text-amber-400">4</td>
-                        <td class="p-3 text-center text-blue-400">1</td>
-                        <td class="p-3 text-center text-emerald-400">27</td>
-                        <td class="p-3 text-center">121.5 hrs</td>
-                        <td class="p-3 text-center font-semibold text-emerald-400">4.5 hrs</td>
-                    </tr>
-                    <tr class="hover:bg-slate-800/40">
-                        <td class="p-3 font-medium text-white">Mr Prem</td>
-                        <td class="p-3 text-center font-bold">27</td>
-                        <td class="p-3 text-center text-amber-400">0</td>
-                        <td class="p-3 text-center text-blue-400">1</td>
-                        <td class="p-3 text-center text-emerald-400">26</td>
-                        <td class="p-3 text-center">111.8 hrs</td>
-                        <td class="p-3 text-center font-semibold text-emerald-400">4.3 hrs</td>
-                    </tr>
+                <tbody class="divide-y divide-slate-800" id="agent-table-body">
+                    <tr><td colspan="7" class="p-4 text-center text-slate-500">Loading dynamic agent data...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -177,95 +142,231 @@
                         <th class="p-3 text-center">Alert Dispatched</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800">
-                    <tr class="hover:bg-slate-800/40">
-                        <td class="p-3 font-mono text-xs text-slate-400">718290000012341</td>
-                        <td class="p-3 font-semibold text-blue-400">#10291</td>
-                        <td class="p-3 text-white">SmartTEL PBX GI/GO frame sync failed</td>
-                        <td class="p-3">Deepak Singh</td>
-                        <td class="p-3"><span class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs">In Progress</span></td>
-                        <td class="p-3 text-center"><span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-full text-xs font-semibold"><i class="fa-solid fa-check mr-1"></i> Dispatched</span></td>
-                    </tr>
-                    <tr class="hover:bg-slate-800/40">
-                        <td class="p-3 font-mono text-xs text-slate-400">718290000012342</td>
-                        <td class="p-3 font-semibold text-blue-400">#10292</td>
-                        <td class="p-3 text-white">Menu & KOT linking update required</td>
-                        <td class="p-3">Rishab</td>
-                        <td class="p-3"><span class="bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs">Open</span></td>
-                        <td class="p-3 text-center"><span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-full text-xs font-semibold"><i class="fa-solid fa-check mr-1"></i> Dispatched</span></td>
-                    </tr>
-                    <tr class="hover:bg-slate-800/40">
-                        <td class="p-3 font-mono text-xs text-slate-400">718290000012343</td>
-                        <td class="p-3 font-semibold text-blue-400">#10293</td>
-                        <td class="p-3 text-white">PBX initialization corporate login setup</td>
-                        <td class="p-3">Mr Prem</td>
-                        <td class="p-3"><span class="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-xs">Closed</span></td>
-                        <td class="p-3 text-center"><span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-full text-xs font-semibold"><i class="fa-solid fa-check mr-1"></i> Dispatched</span></td>
-                    </tr>
+                <tbody class="divide-y divide-slate-800" id="telegram-table-body">
+                    <tr><td colspan="6" class="p-4 text-center text-slate-500">Loading dynamic ticket logs...</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
-    <!-- JAVASCRIPT FOR CHARTS & EXCEL EXPORT -->
-    <script>// --- Render Charts ---
-        window.onload = function() {
-            // Agent Bar Chart
-            const ctxAgent = document.getElementById('agentChart').getContext('2d');
-            new Chart(ctxAgent, {
-                type: 'bar',
-                data: {
-                    labels: ['Deepak Singh', 'Rishab', 'Manoj', 'Mr Prem'],
-                    datasets: [
-                        { label: 'Closed', data: [40, 35, 27, 26], backgroundColor: '#10b981' },
-                        { label: 'In Progress', data: [3, 2, 1, 1], backgroundColor: '#3b82f6' },
-                        { label: 'Open', data: [2, 1, 4, 0], backgroundColor: '#f59e0b' }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#94a3b8' } } },
-                    scales: {
-                        x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
-                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
-                    }
-                }
-            });
+    <!-- JAVASCRIPT FOR DYNAMIC DATA, CHARTS & EXCEL EXPORT -->
+    <script>
+        // Global variables for instances
+        let agentChartInstance = null;
+        let productChartInstance = null;
 
-            // Product Doughnut Chart
-            const ctxProduct = document.getElementById('productChart').getContext('2d');
-            new Chart(ctxProduct, {
-                type: 'doughnut',
-                data: {
-                    labels: ['WISH PMS', 'MyCloud PMS', 'POS Interface', 'SmartTEL PBX'],
-                    datasets: [{
-                        data: [55, 35, 30, 22],
-                        backgroundColor: ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981']
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } }
-                }
-            });
+        // Dynamic State Storage (Initially Empty)
+        let dashboardData = {
+            agents: [],
+            products: { labels: [], counts: [] },
+            tickets: []
         };
 
-        // --- Export HTML Tables directly to Excel Workbook (.xlsx) ---
+        window.onload = function () {
+            loadDashboardData();
+        };
+
+        // --- FETCH DYNAMIC DATA FROM BACKEND ---
+        async function loadDashboardData() {
+            const syncIcon = document.getElementById('sync-icon');
+            if (syncIcon) syncIcon.classList.add('animate-spin');
+
+            try {
+                // Change '/api/dashboard-data' to your backend API endpoint URL
+                const response = await fetch('/api/dashboard-data');
+
+                if (response.ok) {
+                    dashboardData = await response.json();
+                } else {
+                    console.warn('API returned non-200 response, rendering current dynamic state');
+                }
+            } catch (error) {
+                console.error('Fetching dynamic data failed:', error);
+            } finally {
+                if (syncIcon) syncIcon.classList.remove('animate-spin');
+                renderKPIs();
+                renderAgentTable();
+                renderTelegramTable();
+                initOrUpdateCharts();
+            }
+        }
+
+        // --- DYNAMIC KPI CALCULATIONS ---
+        function renderKPIs() {
+            let totalHandled = 0;
+            let totalClosed = 0;
+            let totalHrsSum = 0;
+
+            if (dashboardData.agents && dashboardData.agents.length > 0) {
+                dashboardData.agents.forEach(agent => {
+                    const open = agent.open || 0;
+                    const inProg = agent.inProgress || 0;
+                    const closed = agent.closed || 0;
+                    const hrs = agent.totalHrs || 0;
+
+                    totalHandled += (open + inProg + closed);
+                    totalClosed += closed;
+                    totalHrsSum += hrs;
+                });
+            }
+
+            const avgResTime = totalClosed > 0 ? (totalHrsSum / totalClosed).toFixed(1) : "0.0";
+            const resRate = totalHandled > 0 ? ((totalClosed / totalHandled) * 100).toFixed(1) : "0.0";
+
+            document.getElementById('kpi-total').innerText = totalHandled;
+            document.getElementById('kpi-closed').innerText = totalClosed;
+            document.getElementById('kpi-resolution-rate').innerHTML = `<i class="fa-solid fa-circle-check mr-1"></i> ${resRate}% Resolution Rate`;
+            document.getElementById('kpi-avgtime').innerHTML = `${avgResTime} <span class="text-lg">hrs</span>`;
+
+            const dispatchedCount = dashboardData.tickets ? dashboardData.tickets.filter(t => t.dispatched).length : 0;
+            document.getElementById('kpi-alerts').innerText = dispatchedCount;
+        }
+
+        // --- DYNAMIC AGENT TABLE RENDER ---
+        function renderAgentTable() {
+            const tbody = document.getElementById('agent-table-body');
+
+            if (!dashboardData.agents || dashboardData.agents.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-500">No agent data available</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = dashboardData.agents.map(agent => {
+                const open = agent.open || 0;
+                const inProg = agent.inProgress || 0;
+                const closed = agent.closed || 0;
+                const hrs = agent.totalHrs || 0;
+
+                const total = open + inProg + closed;
+                const avgClosing = closed > 0 ? (hrs / closed).toFixed(1) : '0.0';
+
+                return `
+                        <tr class="hover:bg-slate-800/40">
+                            <td class="p-3 font-medium text-white">${agent.name || 'Unassigned'}</td>
+                            <td class="p-3 text-center font-bold">${total}</td>
+                            <td class="p-3 text-center text-amber-400">${open}</td>
+                            <td class="p-3 text-center text-blue-400">${inProg}</td>
+                            <td class="p-3 text-center text-emerald-400">${closed}</td>
+                            <td class="p-3 text-center">${hrs.toFixed(1)} hrs</td>
+                            <td class="p-3 text-center font-semibold text-emerald-400">${avgClosing} hrs</td>
+                        </tr>
+                    `;
+            }).join('');
+        }
+
+        // --- DYNAMIC TELEGRAM LOG RENDER ---
+        function renderTelegramTable() {
+            const tbody = document.getElementById('telegram-table-body');
+
+            if (!dashboardData.tickets || dashboardData.tickets.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500">No alert logs recorded</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = dashboardData.tickets.map(ticket => {
+                let statusBadge = '';
+                if (ticket.status === 'In Progress') {
+                    statusBadge = '<span class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs">In Progress</span>';
+                } else if (ticket.status === 'Open') {
+                    statusBadge = '<span class="bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs">Open</span>';
+                } else {
+                    statusBadge = '<span class="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-xs">Closed</span>';
+                }
+
+                const alertBadge = ticket.dispatched
+                    ? '<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-full text-xs font-semibold"><i class="fa-solid fa-check mr-1"></i> Dispatched</span>'
+                    : '<span class="bg-slate-700 text-slate-400 px-2 py-1 rounded-full text-xs font-semibold">Pending</span>';
+
+                return `
+                        <tr class="hover:bg-slate-800/40">
+                            <td class="p-3 font-mono text-xs text-slate-400">${ticket.id || '-'}</td>
+                            <td class="p-3 font-semibold text-blue-400">${ticket.number || '-'}</td>
+                            <td class="p-3 text-white">${ticket.subject || '-'}</td>
+                            <td class="p-3">${ticket.agent || 'Unassigned'}</td>
+                            <td class="p-3">${statusBadge}</td>
+                            <td class="p-3 text-center">${alertBadge}</td>
+                        </tr>
+                    `;
+            }).join('');
+        }
+
+        // --- DYNAMIC CHART CREATION / UPDATE ---
+        function initOrUpdateCharts() {
+            const agentNames = dashboardData.agents.map(a => a.name || 'Unknown');
+            const closedData = dashboardData.agents.map(a => a.closed || 0);
+            const inProgressData = dashboardData.agents.map(a => a.inProgress || 0);
+            const openData = dashboardData.agents.map(a => a.open || 0);
+
+            // 1. Agent Bar Chart
+            const ctxAgent = document.getElementById('agentChart').getContext('2d');
+            if (agentChartInstance) {
+                agentChartInstance.data.labels = agentNames;
+                agentChartInstance.data.datasets[0].data = closedData;
+                agentChartInstance.data.datasets[1].data = inProgressData;
+                agentChartInstance.data.datasets[2].data = openData;
+                agentChartInstance.update();
+            } else {
+                agentChartInstance = new Chart(ctxAgent, {
+                    type: 'bar',
+                    data: {
+                        labels: agentNames,
+                        datasets: [
+                            { label: 'Closed', data: closedData, backgroundColor: '#10b981' },
+                            { label: 'In Progress', data: inProgressData, backgroundColor: '#3b82f6' },
+                            { label: 'Open', data: openData, backgroundColor: '#f59e0b' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: '#94a3b8' } } },
+                        scales: {
+                            x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                            y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                        }
+                    }
+                });
+            }
+
+            // 2. Product Doughnut Chart
+            const prodLabels = (dashboardData.products && dashboardData.products.labels) ? dashboardData.products.labels : [];
+            const prodCounts = (dashboardData.products && dashboardData.products.counts) ? dashboardData.products.counts : [];
+
+            const ctxProduct = document.getElementById('productChart').getContext('2d');
+            if (productChartInstance) {
+                productChartInstance.data.labels = prodLabels;
+                productChartInstance.data.datasets[0].data = prodCounts;
+                productChartInstance.update();
+            } else {
+                productChartInstance = new Chart(ctxProduct, {
+                    type: 'doughnut',
+                    data: {
+                        labels: prodLabels,
+                        datasets: [{
+                            data: prodCounts,
+                            backgroundColor: ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } }
+                    }
+                });
+            }
+        }
+
+        // --- EXPORT TO EXCEL ---
         function exportToExcel() {
             var wb = XLSX.utils.book_new();
-
-            // Add Agent Table Worksheet
             var ws1 = XLSX.utils.table_to_sheet(document.getElementById('agent-table'));
             XLSX.utils.book_append_sheet(wb, ws1, "Agent Performance");
 
-            // Add Telegram Alerts Worksheet
             var ws2 = XLSX.utils.table_to_sheet(document.getElementById('telegram-table'));
             XLSX.utils.book_append_sheet(wb, ws2, "Telegram Notifications");
 
-            // Save File
             XLSX.writeFile(wb, "Executive_CEO_Dashboard_Live.xlsx");
-        }</script>
+        }
+    </script>
 </body>
 </html>
