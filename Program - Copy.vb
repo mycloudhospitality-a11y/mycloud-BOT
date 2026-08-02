@@ -171,7 +171,7 @@ Module Module1
                         Console.WriteLine($"   Fetched Range {fromIndex}-{fromIndex + itemsInBatch - 1} | Records received: {itemsInBatch} | Synced to Cloud: {batchSaved} | Cumulative Total: {totalSaved}")
 
                         If batchSaved = 0 Then
-                            Console.WriteLine("   [!] Batch yielded 0 synced records within target date range. Stopping fetch.")
+                            Console.WriteLine("   [!] Batch yielded 0 synced records within target 10-day date range. Stopping fetch.")
                             hasMoreRecords = False
                         ElseIf itemsInBatch < limit Then
                             Console.WriteLine("   Last batch reached (batch size < limit). Stopping fetch.")
