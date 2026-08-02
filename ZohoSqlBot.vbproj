@@ -7,8 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="dotnetreport.aspx" Version="6.3.2" />
     <PackageReference Include="EPPlus" Version="8.6.3" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <PackageReference Include="MySql.Data" Version="26.7.0" />
     <PackageReference Include="System.Data.SqlClient" Version="4.9.1" />
     <PackageReference Include="System.Text.Json" Version="10.0.10" />
   </ItemGroup>

@@ -3,14 +3,14 @@ Imports System.Net.Http
 Imports System.Net.Http.Headers
 Imports System.Text.Json
 Imports System.Threading.Tasks
-Imports Microsoft.Data.SqlClient
+Imports MySql.Data.MySqlClient
 Imports OfficeOpenXml
 Imports OfficeOpenXml.Style
 
 Module Module1
 
     ' =========================================================
-    ' CONFIGURATION — ZOHO DESK & SQL SERVER CREDENTIALS
+    ' CONFIGURATION — ZOHO DESK & TIDB CLOUD CREDENTIALS
     ' =========================================================
     Private ClientId As String = "1000.U3SD5Z72T619AS9SD2SI79G9FD0DAY"
     Private ClientSecret As String = "9b3ad8bd4eeb60541e527d712424450eb46e2cc476"
@@ -21,8 +21,8 @@ Module Module1
     Private ReadOnly TokenUrl As String = "https://accounts.zoho.com/oauth/v2/token"
     Private ReadOnly BaseDeskUrl As String = "https://desk.zoho.com/api/v1/tickets"
 
-    ' SQL Server Connection String
-    Private SqlConnectionString As String = "Server=localhost\SQLEXPRESS;Database=ZOHO DESK;Integrated Security=True;TrustServerCertificate=True;"
+    ' TiDB Cloud Connection String (MySQL Compatible)
+    Private SqlConnectionString As String = "server=gateway01.ap-southeast-1.prod.aws.tidbcloud.com;port=4000;database=sys;uid=3fvtL6XakG6M5TM.root;pwd=YOUR_GENERATED_PASSWORD;SslMode=Preferred;"
 
     ' --- TARGET EXCEL OUTPUT PATH ---
     Private ReadOnly ExcelOutputPath As String = "E:\ZohoSqlBot\Zoho_Desk_CEO_Dashboard.xlsx"
@@ -47,7 +47,7 @@ Module Module1
 
             Console.WriteLine($"2. Fetching tickets for date range: {FilterStartDate:yyyy-MM-dd HH:mm:ss} to {FilterEndDate:yyyy-MM-dd HH:mm:ss}...")
             Dim totalSynced As Integer = FetchAndSyncTicketsByDateRange(freshAccessToken, ZohoOrgId, FilterStartDate, FilterEndDate)
-            Console.WriteLine($"   --> SUCCESS: Total {totalSynced} tickets synced to SQL Server!")
+            Console.WriteLine($"   --> SUCCESS: Total {totalSynced} tickets synced to TiDB Cloud!")
             Console.WriteLine()
 
             ' -------------------------------------------------------------
@@ -168,7 +168,7 @@ Module Module1
                         hasMoreRecords = False
                     Else
                         totalSaved += batchSaved
-                        Console.WriteLine($"   Fetched Range {fromIndex}-{fromIndex + itemsInBatch - 1} | Records received: {itemsInBatch} | Synced to SQL: {batchSaved} | Cumulative Total: {totalSaved}")
+                        Console.WriteLine($"   Fetched Range {fromIndex}-{fromIndex + itemsInBatch - 1} | Records received: {itemsInBatch} | Synced to Cloud: {batchSaved} | Cumulative Total: {totalSaved}")
 
                         If batchSaved = 0 Then
                             Console.WriteLine("   [!] Batch yielded 0 synced records within target date range. Stopping fetch.")
@@ -188,7 +188,7 @@ Module Module1
     End Function
 
     ' =========================================================
-    ' STEP 3: SQL STAGING UPSERT (MERGE STATEMENT)
+    ' STEP 3: MYSQL STAGING UPSERT (DUPLICATE KEY UPDATE)
     ' =========================================================
     Private Function ProcessAndSaveBatchToSql(jsonText As String, ByRef itemsInBatch As Integer) As Integer
         Dim savedCount As Integer = 0
@@ -210,30 +210,23 @@ Module Module1
             itemsInBatch = ticketsArray.GetArrayLength()
             If itemsInBatch = 0 Then Return 0
 
-            Using conn As New SqlConnection(SqlConnectionString)
+            Using conn As New MySqlConnection(SqlConnectionString)
                 conn.Open()
-                Using transaction As SqlTransaction = conn.BeginTransaction()
+                Using transaction As MySqlTransaction = conn.BeginTransaction()
                     Dim query As String = "
-                        MERGE INTO Zoho_Tickets_Staging AS Target 
-                        USING (SELECT @TicketID AS TicketID, @TicketNumber AS TicketNumber, @Subject AS Subject, 
-                                      @Status AS Status, @Priority AS Priority, @Assignee AS Assignee, 
-                                      @AssigneeId AS AssigneeId, @Category AS Category, @Product AS Product, 
-                                      @CreatedTime AS CreatedTime, @ClosedTime AS ClosedTime, @ResolutionTimeHours AS ResolutionTimeHours) AS Source 
-                        ON Target.TicketID = Source.TicketID 
-                        WHEN MATCHED THEN 
-                            UPDATE SET Target.Status = Source.Status, 
-                                       Target.Priority = Source.Priority, 
-                                       Target.Subject = Source.Subject,
-                                       Target.Assignee = Source.Assignee,
-                                       Target.AssigneeId = Source.AssigneeId,
-                                       Target.Category = Source.Category,
-                                       Target.Product = Source.Product,
-                                       Target.ClosedTime = Source.ClosedTime,
-                                       Target.ResolutionTimeHours = Source.ResolutionTimeHours,
-                                       Target.LastUpdated = GETDATE() 
-                        WHEN NOT MATCHED THEN 
-                            INSERT (TicketID, TicketNumber, Subject, Status, Priority, Assignee, AssigneeId, Category, Product, CreatedTime, ClosedTime, ResolutionTimeHours) 
-                            VALUES (Source.TicketID, Source.TicketNumber, Source.Subject, Source.Status, Source.Priority, Source.Assignee, Source.AssigneeId, Source.Category, Source.Product, Source.CreatedTime, Source.ClosedTime, Source.ResolutionTimeHours);"
+                        INSERT INTO Zoho_Tickets_Staging (TicketID, TicketNumber, Subject, Status, Priority, Assignee, AssigneeId, Category, Product, CreatedTime, ClosedTime, ResolutionTimeHours) 
+                        VALUES (@TicketID, @TicketNumber, @Subject, @Status, @Priority, @Assignee, @AssigneeId, @Category, @Product, @CreatedTime, @ClosedTime, @ResolutionTimeHours)
+                        ON DUPLICATE KEY UPDATE 
+                            Status = VALUES(Status), 
+                            Priority = VALUES(Priority), 
+                            Subject = VALUES(Subject),
+                            Assignee = VALUES(Assignee),
+                            AssigneeId = VALUES(AssigneeId),
+                            Category = VALUES(Category),
+                            Product = VALUES(Product),
+                            ClosedTime = VALUES(ClosedTime),
+                            ResolutionTimeHours = VALUES(ResolutionTimeHours),
+                            LastUpdated = CURRENT_TIMESTAMP;"
 
                     For Each ticket As JsonElement In ticketsArray.EnumerateArray()
                         Dim ticketId As String = GetJsonPropString(ticket, "id", "")
@@ -247,7 +240,7 @@ Module Module1
                         Dim category As String = GetJsonPropString(ticket, "category", "General")
                         Dim productName As String = GetJsonPropString(ticket, "productName", "General Product")
 
-                        ' Extract Assignee Details (Name and ID)
+                        ' Extract Assignee Details (ID and Name)
                         Dim assigneeName As String = "Unassigned"
                         Dim assigneeId As String = ""
                         Dim assigneeElem As JsonElement = Nothing
@@ -286,7 +279,7 @@ Module Module1
                             resolutionHours = Math.Round((DateTime.Now - createdTime).TotalHours, 2)
                         End If
 
-                        Using cmd As New SqlCommand(query, conn, transaction)
+                        Using cmd As New MySqlCommand(query, conn, transaction)
                             cmd.Parameters.AddWithValue("@TicketID", ticketId)
                             cmd.Parameters.AddWithValue("@TicketNumber", ticketNumber)
                             cmd.Parameters.AddWithValue("@Subject", subject)
@@ -358,12 +351,12 @@ Module Module1
             ws1.Cells("B2").Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.FromArgb(15, 32, 67))
             ws1.Cells("B2").Style.HorizontalAlignment = ExcelHorizontalAlignment.Center
 
-            Using conn As New SqlConnection(SqlConnectionString)
+            Using conn As New MySqlConnection(SqlConnectionString)
                 conn.Open()
 
                 Dim distinctStatuses As New List(Of String)()
                 Dim statusQuery As String = "SELECT DISTINCT Status FROM Zoho_Tickets_Staging WHERE CreatedTime BETWEEN @StartDate AND @EndDate ORDER BY Status;"
-                Using cmdStatus As New SqlCommand(statusQuery, conn)
+                Using cmdStatus As New MySqlCommand(statusQuery, conn)
                     cmdStatus.Parameters.AddWithValue("@StartDate", FilterStartDate)
                     cmdStatus.Parameters.AddWithValue("@EndDate", FilterEndDate)
                     Using r = cmdStatus.ExecuteReader()
@@ -385,7 +378,7 @@ Module Module1
                     FROM Zoho_Tickets_Staging
                     WHERE CreatedTime BETWEEN @StartDate AND @EndDate;"
 
-                Using cmd As New SqlCommand(kpiQuery, conn)
+                Using cmd As New MySqlCommand(kpiQuery, conn)
                     cmd.Parameters.AddWithValue("@StartDate", FilterStartDate)
                     cmd.Parameters.AddWithValue("@EndDate", FilterEndDate)
                     Using r = cmd.ExecuteReader()
@@ -433,7 +426,7 @@ Module Module1
 
                 Dim statusPivotSql As String = ""
                 For Each st In distinctStatuses
-                    statusPivotSql &= $", SUM(CASE WHEN Status = '{st.Replace("'", "''")}' THEN 1 ELSE 0 END) AS [{st}]"
+                    statusPivotSql &= $", SUM(CASE WHEN Status = '{st.Replace("'", "''")}' THEN 1 ELSE 0 END) AS `{st}`"
                 Next
 
                 Dim agentQuery As String = $"
@@ -448,7 +441,7 @@ Module Module1
                     ORDER BY TotalHandled DESC;"
 
                 Dim rIdx As Integer = 9
-                Using cmdAgent As New SqlCommand(agentQuery, conn)
+                Using cmdAgent As New MySqlCommand(agentQuery, conn)
                     cmdAgent.Parameters.AddWithValue("@StartDate", FilterStartDate)
                     cmdAgent.Parameters.AddWithValue("@EndDate", FilterEndDate)
                     Using r = cmdAgent.ExecuteReader()
@@ -521,7 +514,7 @@ Module Module1
                     ORDER BY Volume DESC;"
 
                 Dim catDataRow As Integer = catHeaderRow + 1
-                Using cmdCat As New SqlCommand(catQuery, conn)
+                Using cmdCat As New MySqlCommand(catQuery, conn)
                     cmdCat.Parameters.AddWithValue("@StartDate", FilterStartDate)
                     cmdCat.Parameters.AddWithValue("@EndDate", FilterEndDate)
                     Using r = cmdCat.ExecuteReader()
@@ -581,7 +574,7 @@ Module Module1
                     ORDER BY Volume DESC;"
 
                 Dim prodDataRow As Integer = prodHeaderRow + 1
-                Using cmdProd As New SqlCommand(prodQuery, conn)
+                Using cmdProd As New MySqlCommand(prodQuery, conn)
                     cmdProd.Parameters.AddWithValue("@StartDate", FilterStartDate)
                     cmdProd.Parameters.AddWithValue("@EndDate", FilterEndDate)
                     Using r = cmdProd.ExecuteReader()
@@ -623,7 +616,7 @@ Module Module1
                 cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center
             Next
 
-            Using conn As New SqlConnection(SqlConnectionString)
+            Using conn As New MySqlConnection(SqlConnectionString)
                 conn.Open()
                 Dim detailQuery As String = "
                     SELECT TicketID, TicketNumber, Subject, Status, Priority, Assignee, Category, Product, CreatedTime, ClosedTime, ResolutionTimeHours 
@@ -631,7 +624,7 @@ Module Module1
                     WHERE CreatedTime BETWEEN @StartDate AND @EndDate 
                     ORDER BY CreatedTime DESC;"
 
-                Using cmdDetail As New SqlCommand(detailQuery, conn)
+                Using cmdDetail As New MySqlCommand(detailQuery, conn)
                     cmdDetail.Parameters.AddWithValue("@StartDate", FilterStartDate)
                     cmdDetail.Parameters.AddWithValue("@EndDate", FilterEndDate)
                     Using r = cmdDetail.ExecuteReader()

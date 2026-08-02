@@ -13,4 +13,9 @@
     <SourceRoot Include="C:\Users\shantanu\.nuget\packages\" />
     <SourceRoot Include="C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages\" />
   </ItemGroup>
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <PkgjQuery Condition=" '$(PkgjQuery)' == '' ">C:\Users\shantanu\.nuget\packages\jquery\3.7.1</PkgjQuery>
+    <PkgjQuery_UI_Combined Condition=" '$(PkgjQuery_UI_Combined)' == '' ">C:\Users\shantanu\.nuget\packages\jquery.ui.combined\1.13.3</PkgjQuery_UI_Combined>
+    <PkgFontAwesome Condition=" '$(PkgFontAwesome)' == '' ">C:\Users\shantanu\.nuget\packages\fontawesome\4.7.0</PkgFontAwesome>
+  </PropertyGroup>
 </Project>

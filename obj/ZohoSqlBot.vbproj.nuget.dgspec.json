@@ -60,6 +60,10 @@
               "target": "Package",
               "version": "[7.0.2, )"
             },
+            "MySql.Data": {
+              "target": "Package",
+              "version": "[26.7.0, )"
+            },
             "System.Data.SqlClient": {
               "target": "Package",
               "version": "[4.9.1, )"
@@ -67,6 +71,10 @@
             "System.Text.Json": {
               "target": "Package",
               "version": "[10.0.10, )"
+            },
+            "dotnetreport.aspx": {
+              "target": "Package",
+              "version": "[6.3.2, )"
             }
           },
           "imports": [
