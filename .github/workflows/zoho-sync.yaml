@@ -3,7 +3,7 @@ name: Zoho Desk Cloud Sync
 on:
   schedule:
     - cron: '*/30 * * * *' # Runs automatically every 30 minutes
-  workflow_dispatch: # Allows you to run it manually anytime
+  workflow_dispatch: # Allows manual trigger anytime
 
 jobs:
   build-and-sync:
@@ -28,6 +28,7 @@ jobs:
       run: dotnet run --project ZohoSqlBot.vbproj --configuration Release --no-restore
       env:
         TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     - name: Send Report Email on Success
       if: success()
@@ -36,11 +37,11 @@ jobs:
         server_address: smtp.gmail.com
         server_port: 465
         secure: true
-         username: ${{ secrets.mycloudhospitality@gmail.com }}
-        password: ${{ secrets.Maverick@578 }}
+        username: "mycloudhospitality@gmail.com"
+        password: ${{ secrets.EMAIL_PASSWORD }}
         subject: "Zoho Desk Sync & Executive Dashboard Report"
         to: deepak@mycloudhospitality.com
-        cc: SHANTANU@mycloudhospitality
+        cc: SHANTANU@mycloudhospitality.com
         from: "Zoho Bot <no-reply@mycloudhospitality.com>"
         body: "The Zoho Desk sync completed successfully. Attached is the executive Excel report."
         attachments: "Executive_CEO_Dashboard.xlsx"
@@ -52,8 +53,8 @@ jobs:
         server_address: smtp.gmail.com
         server_port: 465
         secure: true
-        username: ${{ secrets.mycloudhospitality@gmail.com }}
-        password: ${{ secrets.Maverick@578 }}
+        username: "mycloudhospitality@gmail.com"
+        password: ${{ secrets.EMAIL_PASSWORD }}
         subject: "⚠️ ALERT: Zoho Desk Sync Failed"
         to: SHANTANU@mycloudhospitality.com
         from: "Zoho Bot Alerts <SHANTANU@mycloudhospitality.com>"

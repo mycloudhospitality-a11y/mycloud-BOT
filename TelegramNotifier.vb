@@ -1,3 +1,4 @@
+Imports System.IO
 Imports System.Net.Http
 Imports System.Text
 Imports System.Text.Json
@@ -19,6 +20,7 @@ Public Class TelegramNotifier
         Dim pendingTickets As New List(Of (TicketID As String, TicketNumber As String, Subject As String, Assignee As String, Status As String, AgentChatId As String))()
 
         Try
+            ' Explicitly using MySqlConnection for TiDB Cloud
             Using conn As New MySqlConnection(connString)
                 conn.Open()
 
@@ -65,7 +67,7 @@ Public Class TelegramNotifier
                     Dim telegramApiUrl As String = $"https://api.telegram.org/bot{TelegramBotToken}/sendMessage"
 
                     For Each t In pendingTickets
-                        ' Clean HTML formatted message with standard line breaks (\n)
+                        ' Clean HTML formatted message
                         Dim formattedMessage As String = $"<b>🚨 New Ticket Assigned to You!</b>" & vbCrLf & vbCrLf &
                                                         $"<b>Ticket #:</b> {t.TicketNumber}" & vbCrLf &
                                                         $"<b>Ticket ID:</b> {t.TicketID}" & vbCrLf &
@@ -73,7 +75,7 @@ Public Class TelegramNotifier
                                                         $"<b>Status:</b> {t.Status}" & vbCrLf &
                                                         $"<b>Assigned To:</b> {t.Assignee}"
 
-                        ' Create clean JSON payload to avoid URL encoding issues with HTML tags
+                        ' Create clean JSON payload
                         Dim payloadObj = New With {
                             .chat_id = t.AgentChatId,
                             .text = formattedMessage,
