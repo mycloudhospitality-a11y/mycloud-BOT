@@ -28,8 +28,9 @@ Module Program
     ' TiDB Cloud Connection String (MySQL Compatible)
     Private SqlConnectionString As String = "server=gateway01.ap-southeast-1.prod.aws.tidbcloud.com;port=4000;database=zoho-desk;uid=3fvtL6XakG6M5TM.root;pwd=7qrE14qM5yX5QucS;SslMode=Preferred;"
 
-    ' --- TARGET EXCEL OUTPUT PATH FOR GITHUB ACTIONS & LOCAL ---
+    ' --- TARGET EXCEL & HTML OUTPUT PATH FOR GITHUB ACTIONS & LOCAL ---
     Private ReadOnly ExcelOutputPath As String = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Executive_CEO_Dashboard.xlsx")
+    Private ReadOnly HtmlOutputPath As String = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index.html")
 
     ' --- DATE RANGE FILTER GLOBALS ---
     Private FilterEndDate As DateTime = DateTime.Today.AddDays(1).AddSeconds(-1)
@@ -71,15 +72,22 @@ Module Program
             GenerateCeoDashboardFromSql()
 
             ' -------------------------------------------------------------
-            ' STEP 5: EMAIL DISPATCH TO YOUR INBOX ONLY
+            ' STEP 5: GENERATE LIVE DYNAMIC HTML DASHBOARD FOR NETLIFY
             ' -------------------------------------------------------------
-            Console.WriteLine("5. Sending Test Dashboard via Email...")
+            Console.WriteLine("5. Generating Dynamic HTML Dashboard for Netlify...")
+            GenerateLiveHtmlDashboard()
+
+            ' -------------------------------------------------------------
+            ' STEP 6: EMAIL DISPATCH TO YOUR INBOX ONLY
+            ' -------------------------------------------------------------
+            Console.WriteLine("6. Sending Test Dashboard via Email...")
             SendDashboardViaEmail(ExcelOutputPath)
 
             Console.WriteLine()
             Console.WriteLine($"=========================================================")
             Console.WriteLine($"SUCCESS! Executive Dashboard generated at:")
             Console.WriteLine($"{ExcelOutputPath}")
+            Console.WriteLine($"Live Web Dashboard saved to: {HtmlOutputPath}")
             Console.WriteLine($"=========================================================")
 
         Catch ex As Exception
@@ -824,7 +832,259 @@ Module Program
     End Sub
 
     ' =========================================================
-    ' STEP 6: EMAIL DISPATCH TO YOUR INBOX ONLY
+    ' STEP 6: DYNAMIC HTML GENERATION FOR NETLIFY DASHBOARD
+    ' =========================================================
+    Public Sub GenerateLiveHtmlDashboard()
+        Try
+            Console.WriteLine("--> Pulling fresh records from TiDB Cloud for index.html...")
+
+            Dim totalVolume As Integer = 0
+            Dim totalClosed As Integer = 0
+            Dim avgClosingTime As Double = 0.0
+
+            Dim agentTableRows As New StringBuilder()
+            Dim telegramTableRows As New StringBuilder()
+
+            Dim chartAgents As New List(Of String)()
+            Dim chartClosedCounts As New List(Of Integer)()
+            Dim chartOpenCounts As New List(Of Integer)()
+
+            Dim productLabels As New List(Of String)()
+            Dim productCounts As New List(Of Integer)()
+
+            Using conn As New MySqlConnection(SqlConnectionString)
+                conn.Open()
+
+                ' 1. KPI Aggregates
+                Dim kpiSql As String = "SELECT COUNT(*) AS Total, " &
+                                       "SUM(CASE WHEN Status IN ('Closed','Resolved') THEN 1 ELSE 0 END) AS ClosedCount, " &
+                                       "AVG(CASE WHEN Status IN ('Closed','Resolved') THEN ResolutionTimeHours END) AS AvgRes " &
+                                       "FROM Zoho_Tickets_Staging WHERE CreatedTime BETWEEN @StartDate AND @EndDate;"
+                Using cmd As New MySqlCommand(kpiSql, conn)
+                    cmd.Parameters.AddWithValue("@StartDate", FilterStartDate)
+                    cmd.Parameters.AddWithValue("@EndDate", FilterEndDate)
+                    Using r = cmd.ExecuteReader()
+                        If r.Read() Then
+                            totalVolume = If(IsDBNull(r("Total")), 0, Convert.ToInt32(r("Total")))
+                            totalClosed = If(IsDBNull(r("ClosedCount")), 0, Convert.ToInt32(r("ClosedCount")))
+                            avgClosingTime = If(IsDBNull(r("AvgRes")), 0.0, Math.Round(Convert.ToDouble(r("AvgRes")), 1))
+                        End If
+                    End Using
+                End Using
+
+                ' 2. Agent Breakdown
+                Dim agentSql As String = "SELECT Assignee, COUNT(*) AS TotalHandled, " &
+                                         "SUM(CASE WHEN Status = 'Open' THEN 1 ELSE 0 END) AS OpenCount, " &
+                                         "SUM(CASE WHEN Status = 'In Progress' THEN 1 ELSE 0 END) AS InProgressCount, " &
+                                         "SUM(CASE WHEN Status IN ('Closed','Resolved') THEN 1 ELSE 0 END) AS ClosedCount, " &
+                                         "SUM(CASE WHEN Status IN ('Closed','Resolved') THEN ResolutionTimeHours ELSE 0 END) AS ClosedHours " &
+                                         "FROM Zoho_Tickets_Staging WHERE CreatedTime BETWEEN @StartDate AND @EndDate " &
+                                         "GROUP BY Assignee ORDER BY TotalHandled DESC;"
+                Using cmd As New MySqlCommand(agentSql, conn)
+                    cmd.Parameters.AddWithValue("@StartDate", FilterStartDate)
+                    cmd.Parameters.AddWithValue("@EndDate", FilterEndDate)
+                    Using r = cmd.ExecuteReader()
+                        While r.Read()
+                            Dim agentName As String = r("Assignee").ToString()
+                            Dim handled As Integer = Convert.ToInt32(r("TotalHandled"))
+                            Dim openCnt As Integer = Convert.ToInt32(r("OpenCount"))
+                            Dim inProgCnt As Integer = Convert.ToInt32(r("InProgressCount"))
+                            Dim closedCnt As Integer = Convert.ToInt32(r("ClosedCount"))
+                            Dim closedHrs As Double = Math.Round(Convert.ToDouble(r("ClosedHours")), 1)
+                            Dim avgTime As Double = If(closedCnt > 0, Math.Round(closedHrs / closedCnt, 1), 0.0)
+
+                            agentTableRows.AppendLine($"<tr class='border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors'>" &
+                                                      $"<td class='p-4 font-medium text-slate-100'>{agentName}</td>" &
+                                                      $"<td class='p-4 text-center font-bold text-white'>{handled}</td>" &
+                                                      $"<td class='p-4 text-center text-amber-400 font-semibold'>{openCnt}</td>" &
+                                                      $"<td class='p-4 text-center text-blue-400 font-semibold'>{inProgCnt}</td>" &
+                                                      $"<td class='p-4 text-center text-emerald-400 font-semibold'>{closedCnt}</td>" &
+                                                      $"<td class='p-4 text-center text-slate-300'>{closedHrs} hrs</td>" &
+                                                      $"<td class='p-4 text-center font-bold text-emerald-400'>{avgTime} hrs</td>" &
+                                                      $"</tr>")
+
+                            chartAgents.Add($"'{agentName}'")
+                            chartClosedCounts.Add(closedCnt)
+                            chartOpenCounts.Add(openCnt + inProgCnt)
+                        End While
+                    End Using
+                End Using
+
+                ' 3. Product Share
+                Dim prodSql As String = "SELECT Product, COUNT(*) AS Vol FROM Zoho_Tickets_Staging " &
+                                        "WHERE CreatedTime BETWEEN @StartDate AND @EndDate GROUP BY Product ORDER BY Vol DESC LIMIT 5;"
+                Using cmd As New MySqlCommand(prodSql, conn)
+                    cmd.Parameters.AddWithValue("@StartDate", FilterStartDate)
+                    cmd.Parameters.AddWithValue("@EndDate", FilterEndDate)
+                    Using r = cmd.ExecuteReader()
+                        While r.Read()
+                            productLabels.Add($"'{r("Product").ToString()}'")
+                            productCounts.Add(Convert.ToInt32(r("Vol")))
+                        End While
+                    End Using
+                End Using
+
+                ' 4. Telegram Dispatched Alerts
+                Dim notifSql As String = "SELECT TicketID, TicketNumber, Subject, Assignee, Status FROM Zoho_Tickets_Staging " &
+                                         "WHERE IFNULL(AssignmentNotified,0) = 1 ORDER BY LastUpdated DESC LIMIT 10;"
+                Using cmd As New MySqlCommand(notifSql, conn)
+                    Using r = cmd.ExecuteReader()
+                        While r.Read()
+                            telegramTableRows.AppendLine($"<tr class='border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors'>" &
+                                                         $"<td class='p-3 text-slate-300 font-mono text-xs'>{r("TicketID")}</td>" &
+                                                         $"<td class='p-3 font-semibold text-sky-400'>{r("TicketNumber")}</td>" &
+                                                         $"<td class='p-3 text-slate-200 max-w-xs truncate'>{r("Subject")}</td>" &
+                                                         $"<td class='p-3 font-medium text-white'>{r("Assignee")}</td>" &
+                                                         $"<td class='p-3 text-center'><span class='px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-xs font-semibold'>{r("Status")}</span></td>" &
+                                                         $"<td class='p-3 text-center text-sky-400 font-semibold'>Dispatched</td>" &
+                                                         $"</tr>")
+                        End While
+                    End Using
+                End Using
+            End Using
+
+            ' Build Dynamic HTML
+            Dim htmlContent As String = BuildHtmlTemplate(totalVolume, totalClosed, avgClosingTime,
+                                                          agentTableRows.ToString(), telegramTableRows.ToString(),
+                                                          String.Join(",", chartAgents), String.Join(",", chartClosedCounts), String.Join(",", chartOpenCounts),
+                                                          String.Join(",", productLabels), String.Join(",", productCounts))
+
+            File.WriteAllText(HtmlOutputPath, htmlContent)
+            Console.WriteLine("   [✓] index.html successfully built with live TiDB Cloud data!")
+
+        Catch ex As Exception
+            Console.WriteLine($"   [!] Error building dynamic HTML dashboard: {ex.Message}")
+        End Try
+    End Sub
+
+    ' --- HTML TEMPLATE BUILDER ---
+    Private Function BuildHtmlTemplate(totalVol As Integer, totalClosed As Integer, avgHrs As Double,
+                                      agentRows As String, telegramRows As String,
+                                      agentList As String, closedList As String, openList As String,
+                                      prodLabels As String, prodData As String) As String
+
+        Return $"<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Zoho Desk — Live Executive Dashboard</title>
+    <script src='https://cdn.tailwindcss.com'></script>
+    <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+    <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' rel='stylesheet'>
+    <style>body {{ font-family: 'Inter', sans-serif; }}</style>
+</head>
+<body class='bg-slate-950 text-slate-100 min-h-screen p-4 md:p-8'>
+    <div class='max-w-7xl mx-auto space-y-8'>
+        <header class='flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-800 pb-6 gap-4'>
+            <div>
+                <h1 class='text-2xl md:text-3xl font-bold bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent'>ZOHO DESK — EXECUTIVE HELPDESK DASHBOARD</h1>
+                <p class='text-slate-400 text-sm mt-1'>Real-time TiDB Cloud Synchronization & Performance Metrics</p>
+            </div>
+            <div class='flex items-center gap-3 bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-xs font-mono text-slate-300'>
+                <span class='w-2 h-2 rounded-full bg-emerald-400 animate-pulse'></span>
+                <span>Updated: {DateTime.Now:yyyy-MM-dd HH:mm:ss} IST</span>
+            </div>
+        </header>
+
+        <section class='grid grid-cols-1 md:grid-cols-3 gap-6'>
+            <div class='bg-slate-900/80 border border-slate-800 rounded-2xl p-6'>
+                <p class='text-xs font-semibold text-slate-400 uppercase tracking-wider'>TOTAL VOLUME (10 DAYS)</p>
+                <h3 class='text-4xl font-bold text-white mt-2'>{totalVol}</h3>
+            </div>
+            <div class='bg-slate-900/80 border border-slate-800 rounded-2xl p-6'>
+                <p class='text-xs font-semibold text-slate-400 uppercase tracking-wider'>TOTAL RESOLVED / CLOSED</p>
+                <h3 class='text-4xl font-bold text-emerald-400 mt-2'>{totalClosed}</h3>
+            </div>
+            <div class='bg-slate-900/80 border border-slate-800 rounded-2xl p-6'>
+                <p class='text-xs font-semibold text-slate-400 uppercase tracking-wider'>AVG CLOSING TIME</p>
+                <h3 class='text-4xl font-bold text-sky-400 mt-2'>{avgHrs} <span class='text-lg font-normal text-slate-400'>hrs</span></h3>
+            </div>
+        </section>
+
+        <section class='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+            <div class='lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-2xl p-6'>
+                <h2 class='text-lg font-semibold text-white mb-4'>Agent Ticket Resolution Comparison</h2>
+                <div class='h-64'><canvas id='agentChart'></canvas></div>
+            </div>
+            <div class='bg-slate-900/80 border border-slate-800 rounded-2xl p-6'>
+                <h2 class='text-lg font-semibold text-white mb-4'>Product Wise Distribution</h2>
+                <div class='h-64 flex justify-center items-center'><canvas id='prodChart'></canvas></div>
+            </div>
+        </section>
+
+        <section class='bg-slate-900/80 border border-slate-800 rounded-2xl p-6 overflow-hidden'>
+            <h2 class='text-lg font-semibold text-white mb-4'>Agent Performance & Status Wise Breakup</h2>
+            <div class='overflow-x-auto'>
+                <table class='w-full text-left border-collapse'>
+                    <thead>
+                        <tr class='border-b border-slate-800 text-xs font-semibold uppercase text-slate-400 bg-slate-800/40'>
+                            <th class='p-4'>Agent Name</th>
+                            <th class='p-4 text-center'>Total Handled</th>
+                            <th class='p-4 text-center'>Open</th>
+                            <th class='p-4 text-center'>In Progress</th>
+                            <th class='p-4 text-center'>Closed</th>
+                            <th class='p-4 text-center'>Total Closed Hrs</th>
+                            <th class='p-4 text-center'>Avg Closing Time</th>
+                        </tr>
+                    </thead>
+                    <tbody class='text-sm divide-y divide-slate-800/50'>
+                        {agentRows}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class='bg-slate-900/80 border border-slate-800 rounded-2xl p-6 overflow-hidden'>
+            <h2 class='text-lg font-semibold text-white mb-4'>Telegram Dispatched Agent Alerts</h2>
+            <div class='overflow-x-auto'>
+                <table class='w-full text-left border-collapse'>
+                    <thead>
+                        <tr class='border-b border-slate-800 text-xs font-semibold uppercase text-slate-400 bg-slate-800/40'>
+                            <th class='p-3'>Ticket ID</th>
+                            <th class='p-3'>Number</th>
+                            <th class='p-3'>Subject</th>
+                            <th class='p-3'>Assigned Agent</th>
+                            <th class='p-3 text-center'>Status</th>
+                            <th class='p-3 text-center'>Alert Dispatched</th>
+                        </tr>
+                    </thead>
+                    <tbody class='text-sm divide-y divide-slate-800/50'>
+                        {telegramRows}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        new Chart(document.getElementById('agentChart'), {{
+            type: 'bar',
+            data: {{
+                labels: [{agentList}],
+                datasets: [
+                    {{ label: 'Closed', data: [{closedList}], backgroundColor: '#10b981' }},
+                    {{ label: 'Open / In Progress', data: [{openList}], backgroundColor: '#f59e0b' }}
+                ]
+            }},
+            options: {{ responsive: true, maintainAspectRatio: false, plugins: {{ legend: {{ labels: {{ color: '#94a3b8' }} }} }} }}
+        }});
+
+        new Chart(document.getElementById('prodChart'), {{
+            type: 'doughnut',
+            data: {{
+                labels: [{prodLabels}],
+                datasets: [{{ data: [{prodData}], backgroundColor: ['#38bdf8', '#a855f7', '#ec4899', '#f59e0b', '#10b981'] }}]
+            }},
+            options: {{ responsive: true, maintainAspectRatio: false, plugins: {{ legend: {{ position: 'bottom', labels: {{ color: '#94a3b8' }} }} }} }}
+        }});
+    </script>
+</body>
+</html>"
+    End Function
+
+    ' =========================================================
+    ' STEP 7: EMAIL DISPATCH TO YOUR INBOX ONLY
     ' =========================================================
     Public Sub SendDashboardViaEmail(attachmentPath As String)
         Try

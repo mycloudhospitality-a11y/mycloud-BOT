@@ -16,7 +16,7 @@ Imports System.Reflection
 <Assembly: System.Reflection.AssemblyCompanyAttribute("ZohoSqlBot"),  _
  Assembly: System.Reflection.AssemblyConfigurationAttribute("Debug"),  _
  Assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0"),  _
- Assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+de88b2fdabd4d585ab87066fc929f118197d979d"),  _
+ Assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b00a113e71251345a5cff593e13e1c13f0b52d66"),  _
  Assembly: System.Reflection.AssemblyProductAttribute("ZohoSqlBot"),  _
  Assembly: System.Reflection.AssemblyTitleAttribute("ZohoSqlBot"),  _
  Assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")> 
