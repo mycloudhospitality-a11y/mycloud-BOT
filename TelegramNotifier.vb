@@ -1,4 +1,4 @@
-Imports Microsoft.Data.SqlClient
+Imports MySql.Data.MySqlClient
 Imports System.Net.Http
 Imports System.Text
 Imports System.Text.Json
@@ -20,20 +20,20 @@ Public Module TelegramNotifier
                 t.AssigneeName, 
                 a.TelegramChatId
             FROM Zoho_Tickets_Staging t
-            INNER JOIN Zoho_Agents a ON ISNULL(t.AssigneeId, '') = a.AgentId OR t.AssigneeName = a.AgentName
-            WHERE ISNULL(t.AssignmentNotified, 0) = 0 
+            INNER JOIN Zoho_Agents a ON IFNULL(t.AssigneeId, '') = a.AgentId OR t.AssigneeName = a.AgentName
+            WHERE IFNULL(t.AssignmentNotified, 0) = 0 
               AND a.TelegramChatId IS NOT NULL 
               AND a.TelegramChatId <> ''
               AND t.Status IN ('Open', 'Hold', 'Pending', 'Escalated')"
 
         Dim pendingNotifications As New List(Of TicketAlertDto)()
 
-        Using conn As New SqlConnection(connectionString)
+        Using conn As New MySqlConnection(connectionString)
             conn.Open()
 
             ' 1. Fetch pending alerts
-            Using cmd As New SqlCommand(query, conn)
-                Using reader As SqlDataReader = cmd.ExecuteReader()
+            Using cmd As New MySqlCommand(query, conn)
+                Using reader As MySqlDataReader = cmd.ExecuteReader()
                     While reader.Read()
                         pendingNotifications.Add(New TicketAlertDto With {
                             .TicketId = reader("TicketId").ToString(),
@@ -65,9 +65,9 @@ Public Module TelegramNotifier
 
                     ' 3. Mark as notified in SQL so it won't send duplicates
                     If isSent Then
-                        Dim updateQuery As String = "UPDATE Zoho_Tickets_Staging SET AssignmentNotified = 1 WHERE TicketId = @TicketId"
-                        Using updateCmd As New SqlCommand(updateQuery, conn)
-                            updateCmd.Parameters.AddWithValue("@TicketId", item.TicketId)
+                        Dim updateQuery As String = "UPDATE Zoho_Tickets_Staging SET AssignmentNotified = 1 WHERE TicketId = ?TicketId"
+                        Using updateCmd As New MySqlCommand(updateQuery, conn)
+                            updateCmd.Parameters.AddWithValue("?TicketId", item.TicketId)
                             updateCmd.ExecuteNonQuery()
                         End Using
                         Console.WriteLine($"   [√] Telegram alert sent to {item.AssigneeName} for Ticket #{item.TicketNumber}")

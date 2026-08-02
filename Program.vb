@@ -24,8 +24,8 @@ Module Module1
     ' TiDB Cloud Connection String (MySQL Compatible)
     Private SqlConnectionString As String = "server=gateway01.ap-southeast-1.prod.aws.tidbcloud.com;port=4000;database=zoho-desk;uid=3fvtL6XakG6M5TM.root;pwd=7qrE14qM5yX5QucS;SslMode=Preferred;"
 
-    ' --- TARGET EXCEL OUTPUT PATH ---
-    Private ReadOnly ExcelOutputPath As String = "E:\ZohoSqlBot\Zoho_Desk_CEO_Dashboard.xlsx"
+    ' --- TARGET EXCEL OUTPUT PATH FOR GITHUB ACTIONS & LOCAL ---
+    Private ReadOnly ExcelOutputPath As String = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Executive_CEO_Dashboard.xlsx")
 
     ' --- DATE RANGE FILTER GLOBALS ---
     Private FilterEndDate As DateTime = DateTime.Today.AddDays(1).AddSeconds(-1)
@@ -70,11 +70,11 @@ Module Module1
             Console.WriteLine()
             Console.WriteLine($"CRITICAL ERROR: {ex.Message}")
             Console.WriteLine(ex.StackTrace)
+            Environment.Exit(1)
         End Try
 
         Console.WriteLine()
-        Console.WriteLine("Press any key to exit...")
-        'Console.ReadKey()
+        Console.WriteLine("Process finished successfully.")
     End Sub
 
     ' --- SET UP 10-DAY DATE FILTER ---
@@ -117,7 +117,7 @@ Module Module1
     End Function
 
     ' =========================================================
-    ' STEP 2: PAGINATED TICKET FETCH (STANDARD ENDPOINT WITH OFFSET)
+    ' STEP 2: PAGINATED TICKET FETCH
     ' =========================================================
     Private Function FetchAndSyncTicketsByDateRange(accessToken As String, orgId As String, startDate As DateTime, endDate As DateTime) As Integer
         Dim totalSaved As Integer = 0
@@ -201,7 +201,6 @@ Module Module1
             If root.ValueKind = JsonValueKind.Array Then
                 ticketsArray = root
             ElseIf root.ValueKind = JsonValueKind.Object AndAlso root.TryGetProperty("data", ticketsArray) AndAlso ticketsArray.ValueKind = JsonValueKind.Array Then
-                ' Extracted array from data wrapper
             Else
                 itemsInBatch = 0
                 Return 0
@@ -240,7 +239,7 @@ Module Module1
                         Dim category As String = GetJsonPropString(ticket, "category", "General")
                         Dim productName As String = GetJsonPropString(ticket, "productName", "General Product")
 
-                        ' Extract Assignee Details (ID and Name)
+                        ' Extract Assignee Details
                         Dim assigneeName As String = "Unassigned"
                         Dim assigneeId As String = ""
                         Dim assigneeElem As JsonElement = Nothing
@@ -660,6 +659,52 @@ Module Module1
 
             If ws2.Dimension IsNot Nothing Then
                 ws2.Cells(ws2.Dimension.Address).AutoFitColumns()
+            End If
+
+            ' ---------------------------------------------------------
+            ' TAB 3: TELEGRAM NOTIFICATIONS
+            ' ---------------------------------------------------------
+            Dim ws3 = package.Workbook.Worksheets.Add("Telegram Notifications")
+            ws3.View.ShowGridLines = True
+
+            Dim notifHeaders As String() = {"Ticket ID", "Ticket Number", "Subject", "Assigned Agent", "Status", "Notification Dispatched"}
+            For i As Integer = 0 To notifHeaders.Length - 1
+                Dim cell = ws3.Cells(1, i + 1)
+                cell.Value = notifHeaders(i)
+                cell.Style.Font.Bold = True
+                cell.Style.Font.Color.SetColor(System.Drawing.Color.White)
+                cell.Style.Fill.PatternType = ExcelFillStyle.Solid
+                cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.FromArgb(0, 136, 204))
+                cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center
+            Next
+
+            Using conn As New MySqlConnection(SqlConnectionString)
+                conn.Open()
+                Dim notifQuery As String = "
+                    SELECT TicketID, TicketNumber, Subject, Assignee, Status, AssignmentNotified 
+                    FROM Zoho_Tickets_Staging 
+                    WHERE IFNULL(AssignmentNotified, 0) = 1 
+                    ORDER BY LastUpdated DESC;"
+
+                Using cmdNotif As New MySqlCommand(notifQuery, conn)
+                    Using r = cmdNotif.ExecuteReader()
+                        Dim rowNum As Integer = 2
+                        While r.Read()
+                            ws3.Cells(rowNum, 1).Value = r("TicketID").ToString()
+                            ws3.Cells(rowNum, 2).Value = r("TicketNumber").ToString()
+                            ws3.Cells(rowNum, 3).Value = r("Subject").ToString()
+                            ws3.Cells(rowNum, 4).Value = r("Assignee").ToString()
+                            ws3.Cells(rowNum, 5).Value = r("Status").ToString()
+                            ws3.Cells(rowNum, 6).Value = "Yes"
+                            ws3.Cells(rowNum, 6).Style.HorizontalAlignment = ExcelHorizontalAlignment.Center
+                            rowNum += 1
+                        End While
+                    End Using
+                End Using
+            End Using
+
+            If ws3.Dimension IsNot Nothing Then
+                ws3.Cells(ws3.Dimension.Address).AutoFitColumns()
             End If
 
             package.SaveAs(fileInfo)

@@ -2,7 +2,7 @@ name: Zoho Desk Cloud Sync
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Runs automatically every 6 hours
+    - cron: '*/30 * * * *' # Runs automatically every 30 minutes
   workflow_dispatch: # Allows you to run it manually anytime
 
 jobs:
@@ -28,3 +28,33 @@ jobs:
       run: dotnet run --project ZohoSqlBot.vbproj --configuration Release --no-restore
       env:
         TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
+
+    - name: Send Report Email on Success
+      if: success()
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        secure: true
+         username: ${{ secrets.mycloudhospitality@gmail.com }}
+        password: ${{ secrets.Maverick@578 }}
+        subject: "Zoho Desk Sync & Executive Dashboard Report"
+        to: deepak@mycloudhospitality.com
+        cc: SHANTANU@mycloudhospitality
+        from: "Zoho Bot <no-reply@mycloudhospitality.com>"
+        body: "The Zoho Desk sync completed successfully. Attached is the executive Excel report."
+        attachments: "Executive_CEO_Dashboard.xlsx"
+
+    - name: Send Error Alert on Failure
+      if: failure()
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        secure: true
+        username: ${{ secrets.mycloudhospitality@gmail.com }}
+        password: ${{ secrets.Maverick@578 }}
+        subject: "⚠️ ALERT: Zoho Desk Sync Failed"
+        to: SHANTANU@mycloudhospitality.com
+        from: "Zoho Bot Alerts <SHANTANU@mycloudhospitality.com>"
+        body: "The automated Zoho Desk sync encountered an error during execution. Please check the GitHub Actions logs."
