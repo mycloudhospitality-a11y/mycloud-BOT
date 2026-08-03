@@ -61,7 +61,7 @@ Module Program
             ' -------------------------------------------------------------
             ' STEP 3: TELEGRAM NOTIFICATION DISPATCHER (@Mycloud_pmsbot)
             ' -------------------------------------------------------------
-            Console.WriteLine("3. Dispatching pending assignment notifications to Telegram...")
+            Console.WriteLine("3. Dispatching active pending reminders to Telegram...")
             SendAssignmentAlertsTelegram(SqlConnectionString)
             Console.WriteLine()
 
@@ -327,10 +327,10 @@ Module Program
     End Function
 
     ' =========================================================
-    ' STEP 4: TELEGRAM NOTIFICATIONS DISPATCHER (JSON POST)
+    ' STEP 4: TELEGRAM NOTIFICATIONS DISPATCHER (CONTINUOUS REMINDERS)
     ' =========================================================
     Public Sub SendAssignmentAlertsTelegram(connString As String)
-        Console.WriteLine("--> Checking for newly assigned tickets to notify agents via Telegram...")
+        Console.WriteLine("--> Checking for active open/assigned tickets to send Telegram reminders...")
 
         Dim pendingTickets As New List(Of (TicketID As String, TicketNumber As String, Subject As String, Assignee As String, Status As String, AgentChatId As String))()
 
@@ -348,7 +348,7 @@ Module Program
                         a.TelegramChatId
                     FROM Zoho_Tickets_Staging t
                     INNER JOIN Telegram_Agents a ON t.Assignee = a.AgentName
-                    WHERE (t.AssignmentNotified IS NULL OR t.AssignmentNotified = 0)
+                    WHERE t.Status NOT IN ('Closed', 'Resolved')
                       AND t.Assignee IS NOT NULL 
                       AND t.Assignee <> '' 
                       AND t.Assignee <> 'Unassigned';"
@@ -369,22 +369,25 @@ Module Program
                 End Using
 
                 If pendingTickets.Count = 0 Then
-                    Console.WriteLine("   [!] No new unnotified ticket assignments found for registered agents.")
+                    Console.WriteLine("   [!] No active pending tickets found requiring alerts.")
                     Return
                 End If
 
-                Console.WriteLine($"   [+] Found {pendingTickets.Count} pending individual notification(s) to dispatch.")
+                Console.WriteLine($"   [+] Dispatching {pendingTickets.Count} active ticket reminder(s)...")
 
                 Using client As New HttpClient()
                     Dim telegramApiUrl As String = $"https://api.telegram.org/bot{TelegramBotToken}/sendMessage"
 
                     For Each t In pendingTickets
-                        Dim formattedMessage As String = $"<b>🚨 New Ticket Assigned to You!</b>" & vbCrLf & vbCrLf &
-                                                        $"<b>Ticket #:</b> {t.TicketNumber}" & vbCrLf &
+                        Dim deskUrl As String = $"https://desk.zoho.in/agent/mycloud/zap/tickets/details/{t.TicketID}"
+
+                        Dim formattedMessage As String = $"<b>🚨 Ticket Reminder / Assignment Alert!</b>" & vbCrLf & vbCrLf &
+                                                        $"<b>Ticket #:</b> <a href=""{deskUrl}"">{t.TicketNumber}</a>" & vbCrLf &
                                                         $"<b>Ticket ID:</b> {t.TicketID}" & vbCrLf &
                                                         $"<b>Subject:</b> {t.Subject}" & vbCrLf &
                                                         $"<b>Status:</b> {t.Status}" & vbCrLf &
-                                                        $"<b>Assigned To:</b> {t.Assignee}"
+                                                        $"<b>Assigned To:</b> {t.Assignee}" & vbCrLf & vbCrLf &
+                                                        $"🔗 <a href=""{deskUrl}"">Open Ticket in Zoho Desk</a>"
 
                         Dim payloadObj = New With {
                             .chat_id = t.AgentChatId,
@@ -724,7 +727,7 @@ Module Program
             Dim ws2 = package.Workbook.Worksheets.Add("Live Ticket Register")
             ws2.View.ShowGridLines = True
 
-            Dim headers As String() = {"Ticket ID", "Number", "Subject", "Status", "Priority", "Assignee", "Category", "Product", "Created Time", "Closed Time", "Resolution Time (Hrs)"}
+            Dim headers As String() = {"Ticket ID", "Number", "Subject", "Status", "Priority", "Assignee", "Category", "Product", "Created Time", "Closed Time", "Resolution Time (Hrs)", "Zoho Desk Link"}
             For i As Integer = 0 To headers.Length - 1
                 Dim cell = ws2.Cells(1, i + 1)
                 cell.Value = headers(i)
@@ -749,7 +752,8 @@ Module Program
                     Using r = cmdDetail.ExecuteReader()
                         Dim rowNum As Integer = 2
                         While r.Read()
-                            ws2.Cells(rowNum, 1).Value = r("TicketID").ToString()
+                            Dim tId As String = r("TicketID").ToString()
+                            ws2.Cells(rowNum, 1).Value = tId
                             ws2.Cells(rowNum, 2).Value = r("TicketNumber").ToString()
                             ws2.Cells(rowNum, 3).Value = r("Subject").ToString()
                             ws2.Cells(rowNum, 4).Value = r("Status").ToString()
@@ -771,6 +775,11 @@ Module Program
                             ws2.Cells(rowNum, 11).Value = Convert.ToDouble(r("ResolutionTimeHours"))
                             ws2.Cells(rowNum, 11).Style.Numberformat.Format = "0.0"
 
+                            ' Add Hyperlink to Excel Sheet
+                            Dim deskLink As String = $"https://desk.zoho.in/agent/mycloud/zap/tickets/details/{tId}"
+                            ws2.Cells(rowNum, 12).Hyperlink = New Uri(deskLink)
+                            ws2.Cells(rowNum, 12).Value = "Open Ticket"
+
                             rowNum += 1
                         End While
                     End Using
@@ -787,7 +796,7 @@ Module Program
             Dim ws3 = package.Workbook.Worksheets.Add("Telegram Notifications")
             ws3.View.ShowGridLines = True
 
-            Dim notifHeaders As String() = {"Ticket ID", "Ticket Number", "Subject", "Assigned Agent", "Status", "Notification Dispatched"}
+            Dim notifHeaders As String() = {"Ticket ID", "Ticket Number", "Subject", "Assigned Agent", "Status", "Direct URL"}
             For i As Integer = 0 To notifHeaders.Length - 1
                 Dim cell = ws3.Cells(1, i + 1)
                 cell.Value = notifHeaders(i)
@@ -801,22 +810,26 @@ Module Program
             Using conn As New MySqlConnection(SqlConnectionString)
                 conn.Open()
                 Dim notifQuery As String = "
-                    SELECT TicketID, TicketNumber, Subject, Assignee, Status, AssignmentNotified 
+                    SELECT TicketID, TicketNumber, Subject, Assignee, Status 
                     FROM Zoho_Tickets_Staging 
-                    WHERE IFNULL(AssignmentNotified, 0) = 1 
+                    WHERE Status NOT IN ('Closed', 'Resolved')
                     ORDER BY LastUpdated DESC;"
 
                 Using cmdNotif As New MySqlCommand(notifQuery, conn)
                     Using r = cmdNotif.ExecuteReader()
                         Dim rowNum As Integer = 2
                         While r.Read()
-                            ws3.Cells(rowNum, 1).Value = r("TicketID").ToString()
+                            Dim tId As String = r("TicketID").ToString()
+                            ws3.Cells(rowNum, 1).Value = tId
                             ws3.Cells(rowNum, 2).Value = r("TicketNumber").ToString()
                             ws3.Cells(rowNum, 3).Value = r("Subject").ToString()
                             ws3.Cells(rowNum, 4).Value = r("Assignee").ToString()
                             ws3.Cells(rowNum, 5).Value = r("Status").ToString()
-                            ws3.Cells(rowNum, 6).Value = "Yes"
-                            ws3.Cells(rowNum, 6).Style.HorizontalAlignment = ExcelHorizontalAlignment.Center
+
+                            Dim deskLink As String = $"https://desk.zoho.in/agent/mycloud/zap/tickets/details/{tId}"
+                            ws3.Cells(rowNum, 6).Hyperlink = New Uri(deskLink)
+                            ws3.Cells(rowNum, 6).Value = "View Ticket"
+
                             rowNum += 1
                         End While
                     End Using
@@ -924,19 +937,22 @@ Module Program
                     End Using
                 End Using
 
-                ' 4. Telegram Dispatched Alerts
+                ' 4. Active Pending Telegram Tickets
                 Dim notifSql As String = "SELECT TicketID, TicketNumber, Subject, Assignee, Status FROM Zoho_Tickets_Staging " &
-                                         "WHERE IFNULL(AssignmentNotified,0) = 1 ORDER BY LastUpdated DESC LIMIT 10;"
+                                         "WHERE Status NOT IN ('Closed', 'Resolved') ORDER BY LastUpdated DESC LIMIT 10;"
                 Using cmd As New MySqlCommand(notifSql, conn)
                     Using r = cmd.ExecuteReader()
                         While r.Read()
+                            Dim tId As String = r("TicketID").ToString()
+                            Dim deskUrl As String = $"https://desk.zoho.in/agent/mycloud/zap/tickets/details/{tId}"
+
                             telegramTableRows.AppendLine($"<tr class='border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors'>" &
-                                                         $"<td class='p-3 text-slate-300 font-mono text-xs'>{r("TicketID")}</td>" &
-                                                         $"<td class='p-3 font-semibold text-sky-400'>{r("TicketNumber")}</td>" &
+                                                         $"<td class='p-3 text-slate-300 font-mono text-xs'>{tId}</td>" &
+                                                         $"<td class='p-3 font-semibold text-sky-400'><a href='{deskUrl}' target='_blank' class='hover:underline'>{r("TicketNumber")}</a></td>" &
                                                          $"<td class='p-3 text-slate-200 max-w-xs truncate'>{r("Subject")}</td>" &
                                                          $"<td class='p-3 font-medium text-white'>{r("Assignee")}</td>" &
-                                                         $"<td class='p-3 text-center'><span class='px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-xs font-semibold'>{r("Status")}</span></td>" &
-                                                         $"<td class='p-3 text-center text-sky-400 font-semibold'>Dispatched</td>" &
+                                                         $"<td class='p-3 text-center'><span class='px-2 py-1 bg-amber-500/10 text-amber-400 rounded-full text-xs font-semibold'>{r("Status")}</span></td>" &
+                                                         $"<td class='p-3 text-center'><a href='{deskUrl}' target='_blank' class='px-2 py-1 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 rounded-lg text-xs font-semibold transition-colors'>Open Desk</a></td>" &
                                                          $"</tr>")
                         End While
                     End Using
@@ -1036,7 +1052,7 @@ Module Program
         </section>
 
         <section class='bg-slate-900/80 border border-slate-800 rounded-2xl p-6 overflow-hidden'>
-            <h2 class='text-lg font-semibold text-white mb-4'>Telegram Dispatched Agent Alerts</h2>
+            <h2 class='text-lg font-semibold text-white mb-4'>Active Pending Tickets Requiring Action</h2>
             <div class='overflow-x-auto'>
                 <table class='w-full text-left border-collapse'>
                     <thead>
@@ -1046,7 +1062,7 @@ Module Program
                             <th class='p-3'>Subject</th>
                             <th class='p-3'>Assigned Agent</th>
                             <th class='p-3 text-center'>Status</th>
-                            <th class='p-3 text-center'>Alert Dispatched</th>
+                            <th class='p-3 text-center'>Direct Action</th>
                         </tr>
                     </thead>
                     <tbody class='text-sm divide-y divide-slate-800/50'>
@@ -1088,7 +1104,6 @@ Module Program
     ' =========================================================
     Public Sub SendDashboardViaEmail(attachmentPath As String)
         Try
-            ' Configured strictly to your email address during testing
             Dim recipientEmail As String = "deepak@mycloudhospitality.com"
             Dim senderEmail As String = "your-smtp-email@gmail.com"
             Dim smtpAppPassword As String = "YOUR_APP_PASSWORD"
@@ -1096,7 +1111,6 @@ Module Program
             Dim mail As New System.Net.Mail.MailMessage()
             mail.From = New System.Net.Mail.MailAddress(senderEmail, "Zoho Desk Executive Bot (Test)")
 
-            ' Send ONLY to your inbox
             mail.To.Clear()
             mail.To.Add(recipientEmail)
 
@@ -1107,12 +1121,10 @@ Module Program
                         "Regards," & vbCrLf &
                         "Automation Team"
 
-            ' Attach Generated Excel
             If File.Exists(attachmentPath) Then
                 mail.Attachments.Add(New System.Net.Mail.Attachment(attachmentPath))
             End If
 
-            ' SMTP Client Configuration
             Dim smtp As New System.Net.Mail.SmtpClient("smtp.gmail.com", 587)
             smtp.Credentials = New System.Net.NetworkCredential(senderEmail, smtpAppPassword)
             smtp.EnableSsl = True

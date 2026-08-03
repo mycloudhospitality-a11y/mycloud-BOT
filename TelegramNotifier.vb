@@ -12,10 +12,10 @@ Public Class TelegramNotifier
     Private Shared ReadOnly TelegramBotToken As String = "8849670353:AAG6aUf_AwokE1vs8hxW5lTDCFQK2PMMWY0"
 
     ''' <summary>
-    ''' Checks TiDB Cloud database for unnotified ticket assignments and dispatches individual Telegram alerts to mapped agents.
+    ''' Checks TiDB Cloud database and dispatches Telegram reminder alerts for active tickets until Closed.
     ''' </summary>
     Public Shared Sub SendAssignmentAlertsTelegram(connString As String)
-        Console.WriteLine("--> Checking for newly assigned tickets to notify agents via Telegram...")
+        Console.WriteLine("--> Checking for active open/assigned tickets to send Telegram reminders...")
 
         Dim pendingTickets As New List(Of (TicketID As String, TicketNumber As String, Subject As String, Assignee As String, Status As String, AgentChatId As String))()
 
@@ -24,7 +24,7 @@ Public Class TelegramNotifier
             Using conn As New MySqlConnection(connString)
                 conn.Open()
 
-                ' JOIN Zoho_Tickets_Staging with Telegram_Agents to get individual Chat IDs
+                ' Query active tickets where Status is NOT Closed or Resolved
                 Dim selectSql As String = "
                     SELECT 
                         t.TicketID, 
@@ -35,7 +35,7 @@ Public Class TelegramNotifier
                         a.TelegramChatId
                     FROM Zoho_Tickets_Staging t
                     INNER JOIN Telegram_Agents a ON t.Assignee = a.AgentName
-                    WHERE (t.AssignmentNotified IS NULL OR t.AssignmentNotified = 0)
+                    WHERE t.Status NOT IN ('Closed', 'Resolved')
                       AND t.Assignee IS NOT NULL 
                       AND t.Assignee <> '' 
                       AND t.Assignee <> 'Unassigned';"
@@ -56,24 +56,28 @@ Public Class TelegramNotifier
                 End Using
 
                 If pendingTickets.Count = 0 Then
-                    Console.WriteLine("   [!] No new unnotified ticket assignments found for registered agents.")
+                    Console.WriteLine("   [!] No active pending tickets found requiring alerts.")
                     Return
                 End If
 
-                Console.WriteLine($"   [+] Found {pendingTickets.Count} pending individual notification(s) to dispatch.")
+                Console.WriteLine($"   [+] Dispatching {pendingTickets.Count} active ticket reminder(s)...")
 
                 ' Send Individual Telegram Notifications via JSON POST
                 Using client As New HttpClient()
                     Dim telegramApiUrl As String = $"https://api.telegram.org/bot{TelegramBotToken}/sendMessage"
 
                     For Each t In pendingTickets
-                        ' Clean HTML formatted message
-                        Dim formattedMessage As String = $"<b>🚨 New Ticket Assigned to You!</b>" & vbCrLf & vbCrLf &
-                                                        $"<b>Ticket #:</b> {t.TicketNumber}" & vbCrLf &
+                        ' Direct Zoho Desk Ticket URL
+                        Dim deskUrl As String = $"https://desk.zoho.in/agent/mycloud/zap/tickets/details/{t.TicketID}"
+
+                        ' Clean HTML formatted message with direct link
+                        Dim formattedMessage As String = $"<b>🚨 Ticket Reminder / Assignment Alert!</b>" & vbCrLf & vbCrLf &
+                                                        $"<b>Ticket #:</b> <a href=""{deskUrl}"">{t.TicketNumber}</a>" & vbCrLf &
                                                         $"<b>Ticket ID:</b> {t.TicketID}" & vbCrLf &
                                                         $"<b>Subject:</b> {t.Subject}" & vbCrLf &
                                                         $"<b>Status:</b> {t.Status}" & vbCrLf &
-                                                        $"<b>Assigned To:</b> {t.Assignee}"
+                                                        $"<b>Assigned To:</b> {t.Assignee}" & vbCrLf & vbCrLf &
+                                                        $"🔗 <a href=""{deskUrl}"">Open Ticket in Zoho Desk</a>"
 
                         ' Create clean JSON payload
                         Dim payloadObj = New With {
@@ -92,7 +96,7 @@ Public Class TelegramNotifier
                             If response.IsSuccessStatusCode Then
                                 Console.WriteLine($"   [✓] Telegram alert sent to {t.Assignee} (Chat ID: {t.AgentChatId}) for Ticket #{t.TicketNumber}")
 
-                                ' Mark as notified in SQL
+                                ' Update flag for tracking sync timestamp
                                 Dim updateSql As String = "UPDATE Zoho_Tickets_Staging SET AssignmentNotified = 1 WHERE TicketID = @TicketID;"
                                 Using updateCmd As New MySqlCommand(updateSql, conn)
                                     updateCmd.Parameters.AddWithValue("@TicketID", t.TicketID)
