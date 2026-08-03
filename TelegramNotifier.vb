@@ -67,8 +67,8 @@ Public Class TelegramNotifier
                     Dim telegramApiUrl As String = $"https://api.telegram.org/bot{TelegramBotToken}/sendMessage"
 
                     For Each t In pendingTickets
-                        ' Direct Zoho Desk Ticket URL
-                        Dim deskUrl As String = $"https://desk.zoho.in/agent/mycloud/zap/tickets/details/{t.TicketID}"
+                        ' Direct Zoho Desk Ticket URL (.com domain and mycloudpms/mycloud-support portal)
+                        Dim deskUrl As String = $"https://desk.zoho.com/agent/mycloudpms/mycloud-support/tickets/details/{t.TicketID}"
 
                         ' Clean HTML formatted message with direct link
                         Dim formattedMessage As String = $"<b>🚨 Ticket Reminder / Assignment Alert!</b>" & vbCrLf & vbCrLf &
